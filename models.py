@@ -16,7 +16,7 @@ class Product(SQLModel, table=True):
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     full_name: str
-    email: str = Field(unique=True, index=True) # Index makes searching by email faster
+    email: str = Field(unique=True, index=True)
     hashed_password: str
     contact: Optional[str] = None
     address: Optional[str] = None
