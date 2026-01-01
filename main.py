@@ -34,56 +34,69 @@ def run_tests() -> None:
             schema = f"test_schema_{uuid.uuid4().hex[:8]}"
             print(f"Using Postgres; creating temporary schema '{schema}' for tests...")
 
-            with engine.connect() as conn:
-                conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
-                conn.execute(text(f"SET search_path TO {schema}"))
+            # Build a DB URL that forces the search_path to our temporary schema so
+            # sessions created via the app's get_session will use the schema automatically.
+            from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
-                # Create tables in the temporary schema using the same connection
-                SQLModel.metadata.create_all(conn)
+            parsed = urlparse(db_url)
+            # Merge/append options query param: -c search_path=<schema>
+            qs = parse_qs(parsed.query)
+            qs_options = qs.get("options", [])
+            options_val = f"-csearch_path={schema}"
+            qs_options.append(options_val)
+            qs["options"] = qs_options
+            new_query = urlencode(qs, doseq=True)
+            test_db_url = urlunparse(parsed._replace(query=new_query))
 
-                # Use the same connection so the search_path is active for inserts/queries
-                with Session(conn) as session:
-                    p = models.Product(
-                        name="Test Product",
-                        description="A product",
-                        price=Decimal("9.99"),
-                        in_stock=5,
-                        category="Test",
-                    )
-                    u = models.User(full_name="John Doe", email="john@example.com", hashed_password="hashed")
+            # Create an engine that uses the search_path for all connections
+            engine = create_engine(test_db_url, echo=False)
 
-                    session.add(p)
-                    session.add(u)
-                    session.commit()
-                    session.refresh(p)
-                    session.refresh(u)
+            # Patch database.engine so get_session uses this test engine
+            original_engine = getattr(database, "engine", None)
+            database.engine = engine
 
-                    assert p.id is not None, "Product ID should be set after commit"
-                    assert p.name == "Test Product"
-                    assert p.price == Decimal("9.99")
-                    assert u.email == "john@example.com"
+            # Create tables (will be created in the temporary schema because of options)
+            SQLModel.metadata.create_all(engine)
 
-                    print("✅ Insert and query tests passed in temporary Postgres schema.")
+            # Now run API-level tests using TestClient so the FastAPI dependency `get_session`
+            # is exercised and a fresh session is used per request.
+            from fastapi.testclient import TestClient
+            from app import app
 
-                # Ensure create_db_and_tables runs without error (it will use patched engine)
-                database.create_db_and_tables()
-                print("✅ database.create_db_and_tables executed without error.")
+            client = TestClient(app)
 
-                # Test get_session yields a usable session (generator-style dependency)
-                gen = database.get_session()
-                sess = next(gen)
-                try:
-                    # Simple query to confirm the session is usable
-                    val = sess.execute(text("SELECT 1")).scalar_one()
-                    assert int(val) == 1
-                    print("✅ database.get_session yielded a usable session.")
-                finally:
-                    gen.close()
+            try:
+                # Create a user (registration)
+                resp = client.post("/users/", json={"full_name": "John Doe", "email": "john@example.com", "password": "secret"})
+                assert resp.status_code == 201, resp.text
+                print("✅ POST /users created user via API")
 
-                print("All Postgres tests passed ✅")
+                # Create a product
+                prod_payload = {"name": "Test Product", "description": "A product", "price": "9.99", "in_stock": 5, "category": "Test"}
+                resp = client.post("/products/", json=prod_payload)
+                assert resp.status_code == 201, resp.text
+                prod = resp.json()
+                prod_id = prod["id"]
+                print("✅ POST /products created product via API")
 
-                # Clean up: drop the temporary schema and its contents
-                conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+                # List products
+                resp = client.get("/products/")
+                assert resp.status_code == 200, resp.text
+                data = resp.json()
+                assert len(data) >= 1
+                print("✅ GET /products returned products via API")
+
+                # Get product by id
+                resp = client.get(f"/products/{prod_id}")
+                assert resp.status_code == 200, resp.text
+                print("✅ GET /products/{id} returned the created product via API")
+
+                print("All Postgres API tests passed ✅")
+
+            finally:
+                # Drop temporary schema
+                with engine.connect() as conn:
+                    conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
                 print(f"Dropped temporary schema '{schema}'.")
 
         else:

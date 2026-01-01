@@ -1,12 +1,13 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field
 from decimal import Decimal
+from pydantic import ConfigDict
 
 class Product(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     description: Optional[str] = None
-    price: Decimal = Field(default=0, max_digits=10, decimal_places=2)
+    price: Decimal = Field(default=Decimal("0.00"))
     in_stock: int = Field(default=0)
     category: Optional[str] = None
     media_url: Optional[str] = None
@@ -43,8 +44,7 @@ class UserRead(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductCreate(SQLModel):
@@ -69,5 +69,4 @@ class ProductRead(SQLModel):
     rating: Optional[float] = None
     num_reviews: Optional[int] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
