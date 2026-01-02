@@ -5,3 +5,4 @@ fastapi>=0.95
 uvicorn[standard]
 requests
 httpx
+passlib[bcrypt]

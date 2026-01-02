@@ -4,16 +4,19 @@ Functions accept a SQLModel `Session` and schema/model inputs and return
 model instances or lists.
 """
 from typing import List, Optional
-import hashlib
 
+from passlib.context import CryptContext
 from sqlmodel import Session, select
 
 from models import Product, User, ProductCreate, UserCreate
 
+# Create a password hashing context using bcrypt
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def _hash_password(password: str) -> str:
-    """Return a simple SHA256 hash of the password (placeholder)."""
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    """Return a bcrypt hash of the password."""
+    return pwd_context.hash(password)
 
 
 # -------- Product operations --------
