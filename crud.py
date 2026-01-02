@@ -19,6 +19,11 @@ def _hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plain password against a hashed password."""
+    return pwd_context.verify(plain_password, hashed_password)
+
+
 # -------- Product operations --------
 def get_product(session: Session, product_id: int) -> Optional[Product]:
     """Return a Product by id or None if not found."""
