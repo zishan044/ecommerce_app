@@ -3,8 +3,14 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
+from sqlmodel import Session
 from dotenv import load_dotenv
+
+from database import get_session
+import crud
 
 load_dotenv()
 
@@ -12,6 +18,9 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# OAuth2 scheme for token extraction
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -48,4 +57,44 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    session: Session = Depends(get_session),
+):
+    """Dependency to get the current authenticated user from JWT token.
+    
+    Extracts the JWT token from the Authorization header, verifies it,
+    and returns the corresponding user from the database.
+    
+    Args:
+        token: JWT token extracted from Authorization header (via OAuth2PasswordBearer)
+        session: Database session
+    
+    Returns:
+        User model instance
+    
+    Raises:
+        HTTPException: If token is invalid, expired, or user not found
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    payload = decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
+    
+    email: str = payload.get("sub")
+    if email is None:
+        raise credentials_exception
+    
+    user = crud.get_user_by_email(session, email)
+    if user is None:
+        raise credentials_exception
+    
+    return user
 
