@@ -1,12 +1,22 @@
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from database import create_db_and_tables
 from routers import auth_router, products_router, users_router
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Create database tables
+    create_db_and_tables()
+    yield
+    # Shutdown: (nothing to clean up currently)
+
+
 def get_app() -> FastAPI:
-    app = FastAPI(title="ecommerce-app")
+    app = FastAPI(title="ecommerce-app", lifespan=lifespan)
     
     # CORS configuration
     # Allow all origins in development, can be restricted via CORS_ORIGINS env var
