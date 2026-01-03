@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import create_db_and_tables
-from routers import auth_router, products_router, users_router
+from routers import auth_router, products_router, users_router, orders_router
 
 
 @asynccontextmanager
@@ -39,6 +39,7 @@ def get_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(products_router)
     app.include_router(users_router)
+    app.include_router(orders_router)
     return app
 
 

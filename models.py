@@ -2,6 +2,8 @@ from typing import Optional
 from sqlmodel import SQLModel, Field
 from decimal import Decimal
 from pydantic import ConfigDict
+from datetime import datetime, timezone
+from typing import List
 
 class Product(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -81,4 +83,45 @@ class ProductRead(SQLModel):
     rating: Optional[float] = None
     num_reviews: Optional[int] = None
 
+    model_config = ConfigDict(from_attributes=True)
+
+class Order(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    status: str = Field(default="pending")
+    total_price: Decimal = Field(default=Decimal("0.00"))
+
+class OrderItem(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    order_id: int = Field(foreign_key="order.id")
+    product_id: int = Field(foreign_key="product.id")
+    quantity: int = Field(default=1)
+    unit_price: Decimal = Field(default=Decimal("0.00"))
+
+class OrderItemCreate(SQLModel):
+    product_id: int
+    quantity: int = Field(gt=0)
+
+class OrderCreate(SQLModel):
+    items: List[OrderItemCreate]
+
+class OrderItemRead(SQLModel):
+    id: int
+    order_id: int
+    product_id: int
+    quantity: int
+    unit_price: Decimal
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderRead(SQLModel):
+    id: int
+    user_id: int
+    created_at: datetime
+    status: str
+    total_price: Decimal
+    items: Optional[List[OrderItemRead]] = None
+    
     model_config = ConfigDict(from_attributes=True)

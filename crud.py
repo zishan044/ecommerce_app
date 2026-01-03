@@ -4,11 +4,15 @@ Functions accept a SQLModel `Session` and schema/model inputs and return
 model instances or lists.
 """
 from typing import List, Optional
+from decimal import Decimal
 
 from passlib.context import CryptContext
 from sqlmodel import Session, select
 
-from models import Product, User, ProductCreate, ProductUpdate, UserCreate
+from models import (
+    Product, User, ProductCreate, ProductUpdate, UserCreate,
+    Order, OrderItem, OrderCreate, OrderItemCreate
+)
 
 # Create a password hashing context using bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -98,3 +102,87 @@ def create_user(session: Session, user_in: UserCreate) -> User:
     session.commit()
     session.refresh(user)
     return user
+
+
+# -------- Order operations --------
+def create_order(session: Session, user_id: int, order_in: OrderCreate) -> Order:
+    """Create an Order with OrderItems from the `OrderCreate` schema.
+    
+    Validates product availability, calculates total price, and updates stock.
+    Returns the created Order.
+    
+    Raises:
+        ValueError: If a product is not found or insufficient stock available
+    """
+    total_price = Decimal("0.00")
+    order_items = []
+    
+    # Validate all products and calculate total
+    for item_create in order_in.items:
+        product = get_product(session, item_create.product_id)
+        if not product:
+            raise ValueError(f"Product with id {item_create.product_id} not found")
+        
+        if product.in_stock < item_create.quantity:
+            raise ValueError(
+                f"Insufficient stock for product '{product.name}'. "
+                f"Available: {product.in_stock}, Requested: {item_create.quantity}"
+            )
+        
+        item_total = product.price * item_create.quantity
+        total_price += item_total
+    
+    # Create the order
+    order = Order(user_id=user_id, total_price=total_price, status="pending")
+    session.add(order)
+    session.flush()  # Flush to get order.id without committing
+    
+    # Create order items and update stock
+    for item_create in order_in.items:
+        product = get_product(session, item_create.product_id)
+        
+        # Create order item
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=item_create.product_id,
+            quantity=item_create.quantity,
+            unit_price=product.price
+        )
+        session.add(order_item)
+        order_items.append(order_item)
+        
+        # Update product stock
+        product.in_stock -= item_create.quantity
+        session.add(product)
+    
+    session.commit()
+    session.refresh(order)
+    
+    # Refresh order items
+    for item in order_items:
+        session.refresh(item)
+    
+    return order
+
+
+def get_order(session: Session, order_id: int) -> Optional[Order]:
+    """Return an Order by id or None if not found."""
+    return session.get(Order, order_id)
+
+
+def get_orders_by_user(session: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[Order]:
+    """Return orders for a specific user with optional pagination."""
+    stmt = select(Order).where(Order.user_id == user_id).offset(skip).limit(limit).order_by(Order.created_at.desc())
+    return session.exec(stmt).all()
+
+
+def get_all_orders(session: Session, skip: int = 0, limit: int = 100) -> List[Order]:
+    """Return all orders with optional pagination."""
+    stmt = select(Order).offset(skip).limit(limit).order_by(Order.created_at.desc())
+    return session.exec(stmt).all()
+
+
+def get_order_items(session: Session, order_id: int) -> List[OrderItem]:
+    """Return all OrderItems for a specific order."""
+    stmt = select(OrderItem).where(OrderItem.order_id == order_id)
+    return session.exec(stmt).all()
