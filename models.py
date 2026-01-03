@@ -57,6 +57,18 @@ class ProductCreate(SQLModel):
     media_url: Optional[str] = None
 
 
+class ProductUpdate(SQLModel):
+    """Schema for updating a product (all fields optional)."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[Decimal] = None
+    in_stock: Optional[int] = None
+    category: Optional[str] = None
+    media_url: Optional[str] = None
+    rating: Optional[float] = None
+    num_reviews: Optional[int] = None
+
+
 class ProductRead(SQLModel):
     """Schema returned in responses for products."""
     id: int

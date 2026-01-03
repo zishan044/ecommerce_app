@@ -8,7 +8,7 @@ from typing import List, Optional
 from passlib.context import CryptContext
 from sqlmodel import Session, select
 
-from models import Product, User, ProductCreate, UserCreate
+from models import Product, User, ProductCreate, ProductUpdate, UserCreate
 
 # Create a password hashing context using bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -43,6 +43,33 @@ def create_product(session: Session, product_in: ProductCreate) -> Product:
     session.commit()
     session.refresh(product)
     return product
+
+
+def update_product(session: Session, product_id: int, product_in: ProductUpdate) -> Optional[Product]:
+    """Update a Product by id and return it, or None if not found."""
+    product = session.get(Product, product_id)
+    if not product:
+        return None
+    
+    update_data = product_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(product, field, value)
+    
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return product
+
+
+def delete_product(session: Session, product_id: int) -> bool:
+    """Delete a Product by id. Returns True if deleted, False if not found."""
+    product = session.get(Product, product_id)
+    if not product:
+        return False
+    
+    session.delete(product)
+    session.commit()
+    return True
 
 
 # -------- User operations --------
