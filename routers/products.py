@@ -52,6 +52,21 @@ def update_product(
     return product
 
 
+@router.patch("/{product_id}", response_model=ProductRead)
+def patch_product(
+    *,
+    product_id: int,
+    product_in: ProductUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Partially update a product by id. Requires authentication."""
+    product = crud.update_product(session, product_id, product_in)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    return product
+
+
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(
     *,

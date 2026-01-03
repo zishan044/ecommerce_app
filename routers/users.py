@@ -3,7 +3,8 @@ from sqlmodel import Session
 
 import crud
 from database import get_session
-from models import UserCreate, UserRead
+from models import User, UserCreate, UserRead
+from security import get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -15,3 +16,11 @@ def create_user(*, user_in: UserCreate, session: Session = Depends(get_session))
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     return crud.create_user(session, user_in)
+
+
+@router.get("/me", response_model=UserRead)
+def get_current_user_info(
+    current_user: User = Depends(get_current_user),
+):
+    """Get the current authenticated user's information."""
+    return current_user
