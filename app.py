@@ -3,14 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import create_db_and_tables
 from routers import auth_router, products_router, users_router, orders_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Create database tables
-    create_db_and_tables()
+    # Startup: Database migrations are handled by Alembic
+    # Run migrations manually with: alembic upgrade head
+    # Or use: alembic upgrade head (in production)
     yield
     # Shutdown: (nothing to clean up currently)
 

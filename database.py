@@ -11,6 +11,14 @@ if not DATABASE_URL:
 engine = create_engine(DATABASE_URL, echo=True)
 
 def create_db_and_tables():
+    """Create database tables directly.
+    
+    NOTE: This function is kept for development/testing purposes.
+    For production, use Alembic migrations instead:
+        alembic upgrade head
+    
+    This ensures schema changes can be made without losing data.
+    """
     SQLModel.metadata.create_all(engine)
 
 def get_session():
