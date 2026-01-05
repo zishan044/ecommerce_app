@@ -91,6 +91,8 @@ class Order(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: str = Field(default="pending")
     total_price: Decimal = Field(default=Decimal("0.00"))
+    payment_status: str = Field(default="pending")  # pending, paid, failed
+    stripe_payment_intent_id: Optional[str] = None
 
 class OrderItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -122,6 +124,8 @@ class OrderRead(SQLModel):
     created_at: datetime
     status: str
     total_price: Decimal
+    payment_status: str
+    stripe_payment_intent_id: Optional[str] = None
     items: Optional[List[OrderItemRead]] = None
     
     model_config = ConfigDict(from_attributes=True)

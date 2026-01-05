@@ -186,3 +186,49 @@ def get_order_items(session: Session, order_id: int) -> List[OrderItem]:
     """Return all OrderItems for a specific order."""
     stmt = select(OrderItem).where(OrderItem.order_id == order_id)
     return session.exec(stmt).all()
+
+
+def update_order_payment_status(
+    session: Session,
+    order_id: int,
+    payment_status: str,
+    stripe_payment_intent_id: Optional[str] = None
+) -> Optional[Order]:
+    """Update payment status of an order.
+    
+    Args:
+        session: Database session
+        order_id: Order ID to update
+        payment_status: New payment status (pending, paid, failed)
+        stripe_payment_intent_id: Optional Stripe payment intent ID
+    
+    Returns:
+        Updated Order or None if not found
+    """
+    order = session.get(Order, order_id)
+    if not order:
+        return None
+    
+    order.payment_status = payment_status
+    if stripe_payment_intent_id:
+        order.stripe_payment_intent_id = stripe_payment_intent_id
+    
+    # Update order status based on payment status
+    if payment_status == "paid":
+        order.status = "confirmed"
+    elif payment_status == "failed":
+        order.status = "cancelled"
+    
+    session.add(order)
+    session.commit()
+    session.refresh(order)
+    return order
+
+
+def get_order_by_stripe_payment_intent(
+    session: Session,
+    stripe_payment_intent_id: str
+) -> Optional[Order]:
+    """Get an order by Stripe payment intent ID."""
+    stmt = select(Order).where(Order.stripe_payment_intent_id == stripe_payment_intent_id)
+    return session.exec(stmt).first()
