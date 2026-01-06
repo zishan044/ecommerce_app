@@ -18,12 +18,43 @@ def create_order(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new order (checkout). Requires authentication.
+    """Create a new order (checkout) from items. Requires authentication.
     
     Validates product availability, calculates total price, and updates stock.
     """
     try:
         order = crud.create_order(session, current_user.id, order_in)
+        
+        # Fetch order items to include in response
+        order_items = crud.get_order_items(session, order.id)
+        order_dict = order.model_dump()
+        order_dict["items"] = [item.model_dump() for item in order_items]
+        
+        return OrderRead(**order_dict)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/from-cart", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
+def create_order_from_cart(
+    *,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new order from the user's shopping cart. Requires authentication.
+    
+    Converts all cart items to an order, validates product availability,
+    calculates total price, updates stock, and clears the cart on success.
+    """
+    try:
+        # Get or create cart
+        cart = crud.get_or_create_cart(session, current_user.id)
+        
+        # Create order from cart
+        order = crud.cart_to_order(session, current_user.id, cart.id)
         
         # Fetch order items to include in response
         order_items = crud.get_order_items(session, order.id)

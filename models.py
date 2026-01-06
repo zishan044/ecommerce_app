@@ -129,3 +129,52 @@ class OrderRead(SQLModel):
     items: Optional[List[OrderItemRead]] = None
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class Cart(SQLModel, table=True):
+    """Shopping cart for a user. Persists across sessions."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", unique=True, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CartItem(SQLModel, table=True):
+    """Items in a user's shopping cart."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    cart_id: int = Field(foreign_key="cart.id")
+    product_id: int = Field(foreign_key="product.id")
+    quantity: int = Field(gt=0)
+    added_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CartItemRead(SQLModel):
+    """Schema for cart items in responses."""
+    id: int
+    product_id: int
+    quantity: int
+    added_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CartRead(SQLModel):
+    """Schema for cart responses with items."""
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+    items: Optional[List[CartItemRead]] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CartItemCreate(SQLModel):
+    """Schema for adding items to cart."""
+    product_id: int
+    quantity: int = Field(gt=0)
+
+
+class CartItemUpdate(SQLModel):
+    """Schema for updating cart item quantity."""
+    quantity: int = Field(gt=0)

@@ -11,7 +11,8 @@ from sqlmodel import Session, select
 
 from models import (
     Product, User, ProductCreate, ProductUpdate, UserCreate,
-    Order, OrderItem, OrderCreate, OrderItemCreate
+    Order, OrderItem, OrderCreate, OrderItemCreate,
+    Cart, CartItem, CartItemCreate, CartItemUpdate
 )
 
 # Create a password hashing context using bcrypt
@@ -232,3 +233,204 @@ def get_order_by_stripe_payment_intent(
     """Get an order by Stripe payment intent ID."""
     stmt = select(Order).where(Order.stripe_payment_intent_id == stripe_payment_intent_id)
     return session.exec(stmt).first()
+
+
+# -------- Cart operations --------
+def get_or_create_cart(session: Session, user_id: int) -> Cart:
+    """Get or create a cart for a user."""
+    stmt = select(Cart).where(Cart.user_id == user_id)
+    cart = session.exec(stmt).first()
+    
+    if not cart:
+        cart = Cart(user_id=user_id)
+        session.add(cart)
+        session.commit()
+        session.refresh(cart)
+    
+    return cart
+
+
+def get_cart(session: Session, cart_id: int) -> Optional[Cart]:
+    """Get a cart by id."""
+    return session.get(Cart, cart_id)
+
+
+def get_cart_by_user(session: Session, user_id: int) -> Optional[Cart]:
+    """Get a cart by user_id."""
+    stmt = select(Cart).where(Cart.user_id == user_id)
+    return session.exec(stmt).first()
+
+
+def add_to_cart(session: Session, cart_id: int, item_in: CartItemCreate) -> CartItem:
+    """Add an item to the cart or update quantity if it already exists."""
+    # Check if product exists
+    product = get_product(session, item_in.product_id)
+    if not product:
+        raise ValueError(f"Product with id {item_in.product_id} not found")
+    
+    # Check if item already in cart
+    stmt = select(CartItem).where(
+        CartItem.cart_id == cart_id,
+        CartItem.product_id == item_in.product_id
+    )
+    existing_item = session.exec(stmt).first()
+    
+    if existing_item:
+        # Update quantity
+        existing_item.quantity += item_in.quantity
+        session.add(existing_item)
+    else:
+        # Create new item
+        cart_item = CartItem(
+            cart_id=cart_id,
+            product_id=item_in.product_id,
+            quantity=item_in.quantity
+        )
+        session.add(cart_item)
+    
+    # Update cart's updated_at timestamp
+    cart = session.get(Cart, cart_id)
+    if cart:
+        from datetime import datetime, timezone
+        cart.updated_at = datetime.now(timezone.utc)
+        session.add(cart)
+    
+    session.commit()
+    return existing_item if existing_item else session.exec(
+        select(CartItem).where(
+            CartItem.cart_id == cart_id,
+            CartItem.product_id == item_in.product_id
+        )
+    ).first()
+
+
+def update_cart_item(session: Session, cart_item_id: int, item_in: CartItemUpdate) -> Optional[CartItem]:
+    """Update the quantity of a cart item."""
+    cart_item = session.get(CartItem, cart_item_id)
+    if not cart_item:
+        return None
+    
+    cart_item.quantity = item_in.quantity
+    session.add(cart_item)
+    
+    # Update cart's updated_at timestamp
+    cart = session.get(Cart, cart_item.cart_id)
+    if cart:
+        from datetime import datetime, timezone
+        cart.updated_at = datetime.now(timezone.utc)
+        session.add(cart)
+    
+    session.commit()
+    session.refresh(cart_item)
+    return cart_item
+
+
+def remove_from_cart(session: Session, cart_item_id: int) -> bool:
+    """Remove an item from the cart. Returns True if deleted, False if not found."""
+    cart_item = session.get(CartItem, cart_item_id)
+    if not cart_item:
+        return False
+    
+    # Update cart's updated_at timestamp
+    cart = session.get(Cart, cart_item.cart_id)
+    if cart:
+        from datetime import datetime, timezone
+        cart.updated_at = datetime.now(timezone.utc)
+        session.add(cart)
+    
+    session.delete(cart_item)
+    session.commit()
+    return True
+
+
+def get_cart_items(session: Session, cart_id: int) -> List[CartItem]:
+    """Get all items in a cart."""
+    stmt = select(CartItem).where(CartItem.cart_id == cart_id).order_by(CartItem.added_at.desc())
+    return session.exec(stmt).all()
+
+
+def clear_cart(session: Session, cart_id: int) -> bool:
+    """Clear all items from a cart. Returns True if successful."""
+    stmt = select(CartItem).where(CartItem.cart_id == cart_id)
+    items = session.exec(stmt).all()
+    
+    for item in items:
+        session.delete(item)
+    
+    # Update cart's updated_at timestamp
+    cart = session.get(Cart, cart_id)
+    if cart:
+        from datetime import datetime, timezone
+        cart.updated_at = datetime.now(timezone.utc)
+        session.add(cart)
+    
+    session.commit()
+    return True
+
+
+def cart_to_order(session: Session, user_id: int, cart_id: int) -> Order:
+    """Convert cart items to an order. Clears the cart after successful order creation.
+    
+    Validates product availability, calculates total price, and updates stock.
+    Returns the created Order.
+    
+    Raises:
+        ValueError: If cart is empty, product not found, or insufficient stock
+    """
+    cart_items = get_cart_items(session, cart_id)
+    
+    if not cart_items:
+        raise ValueError("Cart is empty")
+    
+    total_price = Decimal("0.00")
+    order_items = []
+    
+    # Validate all products and calculate total
+    for cart_item in cart_items:
+        product = get_product(session, cart_item.product_id)
+        if not product:
+            raise ValueError(f"Product with id {cart_item.product_id} not found")
+        
+        if product.in_stock < cart_item.quantity:
+            raise ValueError(
+                f"Insufficient stock for product '{product.name}'. "
+                f"Available: {product.in_stock}, Requested: {cart_item.quantity}"
+            )
+        
+        item_total = product.price * cart_item.quantity
+        total_price += item_total
+    
+    # Create the order
+    order = Order(user_id=user_id, total_price=total_price, status="pending")
+    session.add(order)
+    session.flush()  # Flush to get order.id without committing
+    
+    # Create order items and update stock
+    for cart_item in cart_items:
+        product = get_product(session, cart_item.product_id)
+        
+        # Create order item
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=cart_item.product_id,
+            quantity=cart_item.quantity,
+            unit_price=product.price
+        )
+        session.add(order_item)
+        order_items.append(order_item)
+        
+        # Update product stock
+        product.in_stock -= cart_item.quantity
+        session.add(product)
+    
+    # Clear the cart
+    clear_cart(session, cart_id)
+    
+    session.commit()
+    session.refresh(order)
+    
+    # Refresh order items
+    for item in order_items:
+        session.refresh(item)
+    
+    return order
