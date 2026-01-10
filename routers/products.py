@@ -5,7 +5,8 @@ from sqlmodel import Session
 
 import crud
 from database import get_session
-from models import Product, ProductCreate, ProductRead, ProductUpdate, User
+from models import Product, User
+from schemas import ProductCreate, ProductRead, ProductUpdate
 from security import get_current_user
 
 router = APIRouter(prefix="/products", tags=["products"])

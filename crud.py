@@ -10,9 +10,14 @@ from passlib.context import CryptContext
 from sqlmodel import Session, select
 
 from models import (
-    Product, User, ProductCreate, ProductUpdate, UserCreate,
-    Order, OrderItem, OrderCreate, OrderItemCreate,
-    Cart, CartItem, CartItemCreate, CartItemUpdate
+    Product, User,
+    Order, OrderItem,
+    Cart, CartItem,
+)
+from schemas import (
+    ProductCreate, ProductUpdate, UserCreate,
+    OrderCreate, OrderItemCreate,
+    CartItemCreate, CartItemUpdate,
 )
 
 # Create a password hashing context using bcrypt

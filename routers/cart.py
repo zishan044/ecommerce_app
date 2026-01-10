@@ -6,7 +6,8 @@ from sqlmodel import Session
 
 import crud
 from database import get_session
-from models import Cart, CartItem, CartItemCreate, CartItemRead, CartRead, User
+from models import Cart, CartItem, User
+from schemas import CartItemCreate, CartItemRead, CartRead
 from security import get_current_user
 
 router = APIRouter(prefix="/cart", tags=["cart"])

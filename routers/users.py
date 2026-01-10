@@ -3,7 +3,8 @@ from sqlmodel import Session
 
 import crud
 from database import get_session
-from models import User, UserCreate, UserRead
+from models import User
+from schemas import UserCreate, UserRead
 from security import get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])
